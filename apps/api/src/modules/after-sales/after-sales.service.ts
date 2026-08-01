@@ -156,7 +156,7 @@ export class AfterSalesService {
     if (admin?.reason_id) qb.andWhere('sale.reason_id = :reasonId', { reasonId: admin.reason_id });
     if (admin?.keyword) qb.andWhere('(sale.after_sale_no LIKE :keyword OR order.order_no LIKE :keyword OR customer.customer_name LIKE :keyword)', { keyword: `%${admin.keyword}%` });
     if (admin?.start_date) qb.andWhere('sale.created_at >= :start', { start: `${admin.start_date} 00:00:00` }); if (admin?.end_date) qb.andWhere('sale.created_at <= :end', { end: `${admin.end_date} 23:59:59` });
-    const [rows, total] = await qb.orderBy('sale.created_at', 'DESC').skip((query.page - 1) * query.page_size).take(query.page_size).getManyAndCount();
+    const [rows, total] = await qb.orderBy('sale.createdAt', 'DESC').skip((query.page - 1) * query.page_size).take(query.page_size).getManyAndCount();
     return { items: rows.map((row) => this.summary(row)), pagination: { page: query.page, page_size: query.page_size, total } };
   }
   private async findDetailed(tenantId: string, id: string) { const row = await this.orders.findOne({ where: { id, tenantId }, relations: { reason: true, customer: true, order: true, items: { orderItem: true }, media: true, refund: true }, order: { media: { sort: 'ASC' } } }); if (!row) throw new NotFoundException({ code: 'AFTER_SALE_NOT_FOUND', message: '售后申请不存在' }); return row; }
