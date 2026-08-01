@@ -1,4 +1,4 @@
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import { IsArray, IsBoolean, IsDateString, IsIn, IsInt, IsNumber, IsNumberString, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
 export class CustomerCenterQueryDto {
@@ -9,6 +9,20 @@ export class CustomerCenterQueryDto {
   @IsOptional() @IsIn(['ACTIVE', 'PENDING', 'DISABLED']) status?: string;
   @IsOptional() @IsDateString() date_from?: string;
   @IsOptional() @IsDateString() date_to?: string;
+  @IsOptional() @IsNumberString() customer_tag_id?: string;
+}
+
+const arrayQuery = ({ value, obj }: { value: unknown; obj: Record<string, unknown> }) => {
+  const source = value ?? obj['ids[]'];
+  if (source === undefined || source === null || source === '') return undefined;
+  return Array.isArray(source) ? source : String(source).split(',');
+};
+
+export class CustomerExportQueryDto extends CustomerCenterQueryDto {
+  @IsOptional() @Transform(arrayQuery) @IsArray() @IsNumberString({}, { each: true }) ids?: string[];
+  @IsOptional() @Transform(arrayQuery) @IsArray() @IsNumberString({}, { each: true }) 'ids[]'?: string[];
+  @IsOptional() @IsIn(['ALL', 'FILTERED', 'SELECTED']) export_type?: 'ALL' | 'FILTERED' | 'SELECTED';
+  @IsOptional() @Transform(({ value }) => value === true || value === 'true') @IsBoolean() include_statistics?: boolean;
 }
 
 export class SaveCustomerCenterDto {

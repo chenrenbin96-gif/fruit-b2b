@@ -22,6 +22,7 @@
     "test:production-readiness": "node test/production-readiness.performance.mjs",
     "test:procurement:integration": "node test/procurement-foundation.integration.mjs",
     "test:customer-center:integration": "node test/customer-center.integration.mjs",
+    "test:customer-export:integration": "node test/customer-export.integration.mjs",
     "test:finance-media:integration": "node test/finance-media.integration.mjs",
     "test:data-consistency": "node test/data-consistency.audit.mjs",
     "test:acceptance": "npm run test:catalog:integration && npm run test:orders:integration && npm run test:procurement:integration && npm run test:data-consistency"
@@ -38,6 +39,7 @@
     "bcryptjs": "^3.0.2",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
+    "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "ioredis": "^5.7.0",
     "multer": "^2.2.0",

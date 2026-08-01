@@ -33,6 +33,8 @@ const permissionDefinitions = [
   ['customer.write', '管理客户', 'customer'],
   ['customer.center.read', '查看客户档案与分析', 'customer'],
   ['customer.center.manage', '管理客户档案', 'customer'],
+  ['customer.import', '客户批量导入', 'customer'],
+  ['customer.export', '客户档案导出', 'customer'],
   ['customer.config.manage', '管理客户类型集团和标签', 'customer'],
   ['customer.agreement.manage', '管理客户协议价格', 'customer'],
   ['customer.credit.manage', '调整客户信用额度和账期', 'customer'],
@@ -328,7 +330,6 @@ async function seed(manager: EntityManager): Promise<void> {
         'warehouse.task.read',
         'after.sale.read',
         'customer.center.read',
-        'customer.config.manage',
       ],
     },
     {

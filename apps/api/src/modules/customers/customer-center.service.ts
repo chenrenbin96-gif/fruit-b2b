@@ -5,7 +5,7 @@ import { DataSource } from 'typeorm';
 
 import type { AuthPrincipal } from '../auth/types/auth-principal';
 import { CustomerAccountEntity, CustomerEntity, CustomerLevelEntity } from './entities/customer.entities';
-import { AdjustCustomerCreditDto, CustomerCenterQueryDto, SaveCustomerAgreementDto, SaveCustomerCenterDto, SaveCustomerGroupDto, SaveCustomerTagDto, SaveCustomerTypeDto } from './dto/customer-center.dto';
+import { AdjustCustomerCreditDto, CustomerCenterQueryDto, CustomerExportQueryDto, SaveCustomerAgreementDto, SaveCustomerCenterDto, SaveCustomerGroupDto, SaveCustomerTagDto, SaveCustomerTypeDto } from './dto/customer-center.dto';
 import { SkuEntity } from '../products/entities/product.entities';
 
 @Injectable()
@@ -13,6 +13,22 @@ export class CustomerCenterService {
   constructor(private readonly db: DataSource) {}
 
   async list(principal: AuthPrincipal, query: CustomerCenterQueryDto) {
+    return this.queryCustomerRows(principal, query, false);
+  }
+
+  async exportRows(principal: AuthPrincipal, query: CustomerExportQueryDto) {
+    const effectiveQuery = query.export_type === 'ALL'
+      ? { include_statistics: query.include_statistics }
+      : query;
+    return this.queryCustomerRows(principal, effectiveQuery, true, query.export_type === 'SELECTED' ? (query.ids ?? query['ids[]']) : undefined);
+  }
+
+  private async queryCustomerRows(
+    principal: AuthPrincipal,
+    query: CustomerCenterQueryDto & { include_statistics?: boolean },
+    includeExportFields: boolean,
+    selectedIds?: string[],
+  ) {
     const params: unknown[] = [principal.tenantId];
     const filters = ['c.tenant_id=?', 'c.deleted_at IS NULL'];
     if (principal.roleCode === 'SALES') { filters.push('COALESCE(c.salesperson_id,c.sales_owner_id)=?'); params.push(principal.userId); }
@@ -23,15 +39,51 @@ export class CustomerCenterService {
     if (query.status) { filters.push('c.status=?'); params.push(query.status); }
     if (query.date_from) { filters.push('c.created_at>=?'); params.push(query.date_from); }
     if (query.date_to) { filters.push('c.created_at<DATE_ADD(?,INTERVAL 1 DAY)'); params.push(query.date_to); }
+    if (query.customer_tag_id) { filters.push('EXISTS(SELECT 1 FROM customer_tag_relation ctrf WHERE ctrf.tenant_id=c.tenant_id AND ctrf.customer_id=c.id AND ctrf.tag_id=?)'); params.push(query.customer_tag_id); }
+    if (selectedIds) {
+      if (selectedIds.length === 0) return [];
+      filters.push(`c.id IN (${selectedIds.map(() => '?').join(',')})`);
+      params.push(...selectedIds);
+    }
+    const exportFields = includeExportFields ? `,
+      c.discount_rate,c.min_order_amount,c.cod_enabled,c.online_payment_enabled,c.balance_payment_enabled,
+      c.credit_payment_enabled,c.order_review_mode,c.unified_social_credit_code,c.certification_status,
+      c.sales_remark,c.business_type,COALESCE(cs.first_order_min_amount,c.min_order_amount) configured_min_order_amount,
+      '' detail_address,'' business_license` : '';
+    const statisticsFields = includeExportFields && query.include_statistics ? `,
+      COALESCE(os.total_order_amount,0) total_order_amount,
+      COALESCE(os.total_purchase_amount,0) total_purchase_amount,
+      COALESCE(afs.after_sale_count,0) after_sale_count,
+      os.last_order_time` : '';
+    const statisticsJoins = includeExportFields && query.include_statistics ? `
+      LEFT JOIN (SELECT tenant_id,customer_id,
+        SUM(CASE WHEN status<>'CANCELLED' THEN COALESCE(final_amount,estimated_amount,0) ELSE 0 END) total_order_amount,
+        SUM(CASE WHEN status='COMPLETED' THEN COALESCE(final_amount,estimated_amount,0) ELSE 0 END) total_purchase_amount,
+        MAX(CASE WHEN status<>'CANCELLED' THEN created_at END) last_order_time
+        FROM orders GROUP BY tenant_id,customer_id) os ON os.tenant_id=c.tenant_id AND os.customer_id=c.id
+      LEFT JOIN (SELECT tenant_id,customer_id,COUNT(*) after_sale_count FROM after_sales_orders GROUP BY tenant_id,customer_id) afs
+        ON afs.tenant_id=c.tenant_id AND afs.customer_id=c.id` : '';
     return this.db.query(`SELECT c.id,c.customer_no,c.customer_name,c.contact_name,c.phone,c.address,
+      c.customer_type_id,c.delivery_region_id,COALESCE(c.salesperson_id,c.sales_owner_id) salesperson_id,
       ca.account_name,dr.region_name, c.default_route,ct.name customer_type,u.name salesperson_name,
       c.credit_days,c.credit_limit,c.balance_due,c.created_at,c.registration_channel,c.status,
-      cg.group_name,GROUP_CONCAT(DISTINCT tags.tag_name ORDER BY tags.sort) tags
+      cg.group_name,GROUP_CONCAT(DISTINCT tags.tag_name ORDER BY tags.sort SEPARATOR '、') tags
+      ${exportFields}${statisticsFields}
       FROM customers c LEFT JOIN customer_accounts ca ON ca.customer_id=c.id AND ca.is_primary=1 AND ca.deleted_at IS NULL
       LEFT JOIN delivery_regions dr ON dr.id=c.delivery_region_id LEFT JOIN customer_types ct ON ct.id=c.customer_type_id
       LEFT JOIN users u ON u.id=COALESCE(c.salesperson_id,c.sales_owner_id) LEFT JOIN customer_groups cg ON cg.id=c.group_id
       LEFT JOIN customer_tag_relation ctr ON ctr.customer_id=c.id LEFT JOIN customer_tags tags ON tags.id=ctr.tag_id
+      LEFT JOIN customer_settings cs ON cs.customer_id=c.id AND cs.tenant_id=c.tenant_id AND cs.enabled=1
+      ${statisticsJoins}
       WHERE ${filters.join(' AND ')} GROUP BY c.id,ca.account_name,dr.region_name,ct.name,u.name,cg.group_name ORDER BY c.id DESC`, params);
+  }
+
+  async filterOptions(tenantId: string) {
+    const [regions, salespeople] = await Promise.all([
+      this.db.query(`SELECT id,region_name name FROM delivery_regions WHERE tenant_id=? AND status='ACTIVE' AND deleted_at IS NULL ORDER BY sort,id`, [tenantId]),
+      this.db.query(`SELECT u.id,u.name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.tenant_id=? AND u.status='ACTIVE' AND u.deleted_at IS NULL AND r.role_code IN ('ADMIN','SALES') ORDER BY u.name,u.id`, [tenantId]),
+    ]);
+    return { regions, salespeople };
   }
 
   async detail(principal: AuthPrincipal, id: string) {
@@ -61,7 +113,7 @@ export class CustomerCenterService {
       row ??= manager.create(CustomerEntity,{tenantId:principal.tenantId,customerNo:dto.customer_no?.trim() || this.no(),balanceDue:'0.00'});
       Object.assign(row,{
         customerName:dto.customer_name.trim(),contactName:dto.contact_name.trim(),phone:dto.phone.trim(),address:dto.address.trim(),
-        businessType:dto.business_type ?? 'ENTERPRISE',levelId:level.id,customerTypeId:dto.customer_type_id ?? null,groupId:dto.group_id ?? null,
+        businessType:dto.business_type ?? row.businessType ?? 'FRUIT_RETAIL',levelId:level.id,customerTypeId:dto.customer_type_id ?? null,groupId:dto.group_id ?? null,
         deliveryRegionId:dto.delivery_region_id ?? null,defaultRoute:dto.default_route ?? null,salespersonId:dto.salesperson_id ?? principal.userId ?? null,
         unifiedSocialCreditCode:dto.unified_social_credit_code ?? null,certificationStatus:dto.certification_status ?? 'UNVERIFIED',registrationChannel:'ADMIN',
         latitude:dto.latitude?.toFixed(7) ?? null,longitude:dto.longitude?.toFixed(7) ?? null,deliveryTime:dto.delivery_time ?? null,receivingCycle:dto.receiving_cycle ?? null,

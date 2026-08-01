@@ -12,6 +12,7 @@ import { CustomersController } from './customers.controller';
 import { CustomersService } from './customers.service';
 import { CustomerCenterController } from './customer-center.controller';
 import { CustomerCenterService } from './customer-center.service';
+import { CustomerExcelService } from './customer-excel.service';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { CustomerCenterService } from './customer-center.service';
     ]),
   ],
   controllers: [CustomersController, CustomerCenterController],
-  providers: [CustomersService, CustomerCenterService],
+  providers: [CustomersService, CustomerCenterService, CustomerExcelService],
   exports: [TypeOrmModule, CustomersService],
 })
 export class CustomersModule {}

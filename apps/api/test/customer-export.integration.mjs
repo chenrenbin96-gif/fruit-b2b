@@ -1,0 +1,35 @@
+import assert from 'node:assert/strict';
+import { hash } from 'bcryptjs';
+import ExcelJS from 'exceljs';
+import mysql from 'mysql2/promise';
+import { writeFile } from 'node:fs/promises';
+
+const base=process.env.TEST_API_BASE_URL??'http://127.0.0.1:8080/api/v1';
+const dbUrl=process.env.DATABASE_URL;
+if(!dbUrl)throw new Error('DATABASE_URL required');
+const suffix=Date.now().toString().slice(-8),password=`Export_${suffix}!`,ids={users:[],customers:[],loadCustomers:[],logs:[]};
+async function json(path,{method='GET',token,body,expected}={}){const response=await fetch(base+path,{method,headers:{'content-type':'application/json',...(token?{authorization:`Bearer ${token}`}:{})},body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();assert.equal(response.status,expected??(method==='POST'?201:200),`${method} ${path}: ${JSON.stringify(data)}`);return data.data;}
+async function login(username){return (await json('/auth/employee/login',{method:'POST',body:{tenant_code:'DEFAULT',username,password}})).access_token;}
+async function exportFile(path,token,expected=200){const response=await fetch(base+path,{headers:{authorization:`Bearer ${token}`}});if(response.status!==expected)assert.fail(`${path}: expected ${expected}, received ${response.status}: ${await response.text()}`);if(expected!==200)return null;assert.match(response.headers.get('content-type')??'',/spreadsheetml/);return Buffer.from(await response.arrayBuffer());}
+async function workbookRows(buffer){const book=new ExcelJS.Workbook();await book.xlsx.load(buffer);const sheet=book.worksheets[0];assert.ok(sheet);return sheet;}
+const db=await mysql.createConnection(dbUrl);
+try{
+ const [[tenant]]=await db.query("SELECT id FROM tenants WHERE tenant_code='DEFAULT'");const tenantId=String(tenant.id);const [[store]]=await db.query('SELECT id FROM stores WHERE tenant_id=? LIMIT 1',[tenantId]);const [[level]]=await db.query("SELECT id FROM customer_levels WHERE tenant_id=? AND status='ACTIVE' ORDER BY sort LIMIT 1",[tenantId]);
+ const [roles]=await db.query("SELECT id,role_code FROM roles WHERE tenant_id=? AND role_code IN ('ADMIN','FINANCE','OPERATIONS','WAREHOUSE','PURCHASER')",[tenantId]);const roleMap=Object.fromEntries(roles.map(x=>[x.role_code,String(x.id)]));assert.equal(Object.keys(roleMap).length,5);
+ const passwordHash=await hash(password,4);for(const role of Object.keys(roleMap)){const username=`${role.toLowerCase()}_export_${suffix}`;const [result]=await db.execute("INSERT INTO users(tenant_id,username,password_hash,name,role_id,store_id,status) VALUES(?,?,?,?,?,?,'ACTIVE')",[tenantId,username,passwordHash,`${role}导出验收`,roleMap[role],String(store.id)]);ids.users.push(String(result.insertId));ids[`${role}Id`]=String(result.insertId);ids[role]=username;}
+ const tokens={};for(const role of Object.keys(roleMap))tokens[role]=await login(ids[role]);
+ const types=await json('/admin/customer-types',{token:tokens.ADMIN});const options=await json('/admin/customers/filter-options',{token:tokens.ADMIN});assert.ok(types[0]&&options.regions[0]);
+ for(let index=0;index<3;index++){const customer=await json('/admin/customers',{method:'POST',token:tokens.ADMIN,body:{account_name:`export${suffix}${index}`,customer_name:`导出客户${suffix}-${index}`,contact_name:'验收联系人',phone:`137${suffix.slice(-6)}${index}`.slice(0,11),address:`验收区域${index}`,customer_type_id:String(types[0].id),delivery_region_id:String(options.regions[0].id),status:index===2?'DISABLED':'ACTIVE',credit_limit:1000+index,credit_days:15}});ids.customers.push(String(customer.id));}
+ const selected=await exportFile(`/admin/customers/export?export_type=SELECTED&ids%5B%5D=${ids.customers[0]}&ids%5B%5D=${ids.customers[1]}&include_statistics=true`,tokens.ADMIN);if(process.env.EXPORT_ARTIFACT_PATH)await writeFile(process.env.EXPORT_ARTIFACT_PATH,selected);const selectedSheet=await workbookRows(selected);assert.equal(selectedSheet.rowCount,3);assert.equal(selectedSheet.getCell('A1').value,'客户ID');assert.equal(selectedSheet.getCell('AE1').value,'最后下单时间');
+ const filtered=await exportFile(`/admin/customers/export?export_type=FILTERED&keyword=${encodeURIComponent(`导出客户${suffix}`)}&status=ACTIVE`,tokens.ADMIN);const filteredSheet=await workbookRows(filtered);assert.equal(filteredSheet.rowCount,3);
+ for(const role of ['FINANCE','OPERATIONS','WAREHOUSE','PURCHASER'])await exportFile('/admin/customers/export?export_type=FILTERED',tokens[role],403);
+ const form=new FormData();form.append('file',new Blob([selected]),'客户档案.xlsx');const imported=await fetch(base+'/admin/customers/import',{method:'POST',headers:{authorization:`Bearer ${tokens.ADMIN}`},body:form});if(imported.status!==201)assert.fail(`import expected 201, received ${imported.status}: ${await imported.text()}`);const importedBody=await imported.json();assert.equal(importedBody.data.updated,2);
+ const prefix=`LOAD${suffix}`;for(let batch=0;batch<10;batch++){const values=[],params=[];for(let offset=0;offset<1000;offset++){const n=batch*1000+offset;values.push('(?,?,?,?,?,?,?,?,?,\'ACTIVE\')');params.push(tenantId,`${prefix}${String(n).padStart(5,'0')}`,`${prefix}客户${n}`,'压测联系人',`136${String(n).padStart(8,'0')}`,'导出压测地址','FRUIT_RETAIL',String(level.id),'0.00');}const [result]=await db.query(`INSERT INTO customers(tenant_id,customer_no,customer_name,contact_name,phone,address,business_type,level_id,balance_due,status) VALUES ${values.join(',')}`,params);for(let n=0;n<1000;n++)ids.loadCustomers.push(String(BigInt(result.insertId)+BigInt(n)));}
+ const started=Date.now();const large=await exportFile(`/admin/customers/export?export_type=FILTERED&keyword=${prefix}`,tokens.ADMIN);const largeSheet=await workbookRows(large);assert.equal(largeSheet.rowCount,10001);const elapsedMs=Date.now()-started;
+ const [logs]=await db.query("SELECT id,export_count,filter_json,ip FROM customer_operation_logs WHERE tenant_id=? AND admin_id=? AND operation_type='customer_export' ORDER BY id DESC",[tenantId,ids.ADMINId]);assert.ok(logs.length>=3);assert.equal(Number(logs[0].export_count),10000);ids.logs=logs.map(x=>String(x.id));
+ console.log(JSON.stringify({migration_table:'PASS',selected_export:'PASS',filtered_export:'PASS',template_roundtrip:'PASS',non_admin_403:'PASS',audit_log:'PASS',customers_10000:'PASS',rows:largeSheet.rowCount-1,elapsed_ms:elapsedMs}));
+}finally{
+ if(ids.users.length)await db.query('DELETE FROM customer_operation_logs WHERE admin_id IN (?)',[ids.users]);
+ const allCustomers=[...ids.customers,...ids.loadCustomers];if(allCustomers.length){for(let start=0;start<allCustomers.length;start+=1000){const batch=allCustomers.slice(start,start+1000);await db.query('DELETE FROM customer_tag_relation WHERE customer_id IN (?)',[batch]);await db.query('DELETE FROM customer_accounts WHERE customer_id IN (?)',[batch]);await db.query('DELETE FROM customer_settings WHERE customer_id IN (?)',[batch]);await db.query('DELETE FROM customers WHERE id IN (?)',[batch]);}}
+ if(ids.users.length)await db.query('DELETE FROM users WHERE id IN (?)',[ids.users]);await db.end();
+}
