@@ -1,11 +1,14 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import type Redis from 'ioredis';
 import { Brackets, DataSource, In, Repository } from 'typeorm';
 
+import { REDIS_CLIENT } from '../../infrastructure/redis/redis.constants';
 import { InventoryEntity } from '../inventory/entities/inventory.entities';
 import {
   CreateProductDto,
@@ -29,6 +32,7 @@ import { ProductDescriptionEntity } from './entities/product-description.entity'
 @Injectable()
 export class ProductsService {
   constructor(
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
     private readonly dataSource: DataSource,
     @InjectRepository(ProductEntity)
     private readonly products: Repository<ProductEntity>,
@@ -437,7 +441,9 @@ export class ProductsService {
       }
     }
     product.status = status;
-    return this.simpleProductView(await this.products.save(product));
+    const saved = await this.products.save(product);
+    await this.invalidateHomeConfig(tenantId);
+    return this.simpleProductView(saved);
   }
 
   async listSkus(tenantId: string, query: SkuListQueryDto) {
@@ -713,6 +719,14 @@ export class ProductsService {
       else await this.updateStatus(tenantId, id, dto.action);
     }
     return { affected: dto.ids.length };
+  }
+
+  private async invalidateHomeConfig(tenantId: string): Promise<void> {
+    try {
+      await this.redis.incr(`home:config-version:${tenantId}`);
+    } catch {
+      // Product status remains the source of truth if Redis is unavailable.
+    }
   }
 
   async workbench(tenantId: string, id: string) {
