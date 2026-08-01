@@ -1,0 +1,14 @@
+{
+  "description": "水果B2B小程序开发者工具入口",
+  "compileType": "miniprogram",
+  "miniprogramRoot": "dist/dev/mp-weixin/",
+  "appid": "wx6466f955c07ff34b",
+  "projectname": "鲜链云",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "minified": false,
+    "compileHotReLoad": false,
+    "bigPackageSizeSupport": true
+  }
+}

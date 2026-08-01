@@ -1,0 +1,17 @@
+{
+  "name": "鲜链云",
+  "appid": "__UNI__FRUITB2B",
+  "description": "水果批发 B2B 订货管理系统",
+  "versionName": "0.1.0",
+  "versionCode": "100",
+  "transformPx": false,
+  "mp-weixin": {
+    "appid": "wx6466f955c07ff34b",
+    "setting": {
+      "urlCheck": true,
+      "es6": true,
+      "minified": true
+    },
+    "usingComponents": true
+  }
+}

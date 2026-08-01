@@ -1,7 +1,11 @@
 {
-  "name": "site-creator-vinext-starter",
+  "name": "fruit-b2b-platform",
   "version": "0.1.0",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "engines": {
     "node": ">=22.13.0"
   },
@@ -9,13 +13,25 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
+    "dev:api": "npm run start:dev --workspace @fruit-b2b/api",
+    "dev:admin": "npm run dev --workspace @fruit-b2b/admin",
+    "dev:miniapp": "npm run dev:mp-weixin --workspace @fruit-b2b/miniapp",
+    "build:api": "npm run build --workspace @fruit-b2b/api",
+    "build:admin": "npm run build --workspace @fruit-b2b/admin",
+    "build:miniapp": "npm run build:mp-weixin --workspace @fruit-b2b/miniapp",
+    "db:migrate": "npm run migration:run --workspace @fruit-b2b/api",
+    "db:seed": "npm run seed:run --workspace @fruit-b2b/api",
+    "db:seed:catalog-test": "npm run seed:catalog-test --workspace @fruit-b2b/api",
+    "build:packages": "npm run build --workspace @fruit-b2b/contracts && npm run build --workspace @fruit-b2b/shared-utils",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "build:apps": "npm run build:api && npm run build:admin && npm run build:miniapp",
     "test": "npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",
-    "next": "16.2.6",
+    "next": "16.2.11",
     "react": "19.2.6",
     "react-dom": "19.2.6"
   },
@@ -25,9 +41,11 @@
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@vue/shared": "^3.5.21",
     "@vitejs/plugin-react": "6.0.2",
     "@vitejs/plugin-rsc": "0.5.26",
     "drizzle-kit": "0.31.10",
+    "estree-walker": "2.0.2",
     "eslint": "9.39.4",
     "eslint-config-next": "16.2.6",
     "react-server-dom-webpack": "19.2.6",

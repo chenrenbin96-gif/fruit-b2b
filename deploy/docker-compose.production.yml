@@ -1,0 +1,165 @@
+name: fruit-b2b-production
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  mysql:
+    image: mysql:8.0.39
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?}
+      MYSQL_USER: ${MYSQL_USER:?}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --default-time-zone=+00:00
+      - --slow-query-log=ON
+      - --long-query-time=${MYSQL_SLOW_QUERY_SECONDS:-1}
+      - --slow-query-log-file=/var/lib/mysql/mysql-slow.log
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u$${MYSQL_USER} -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 30s
+    networks: [backend]
+    logging: *default-logging
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:?}"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a '$${REDIS_PASSWORD}' ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?}
+    networks: [backend]
+    logging: *default-logging
+
+  api:
+    image: ${API_IMAGE:?}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      APP_PORT: 3000
+      API_PREFIX: api
+      API_VERSION: v1
+      LOG_LEVEL: info
+      CORS_ORIGINS: ${CORS_ORIGINS:?}
+      DATABASE_URL: ${DATABASE_URL:?}
+      REDIS_URL: ${REDIS_URL:?}
+      REDIS_KEY_PREFIX: fruit-b2b:production
+      CATEGORY_CACHE_TTL_SECONDS: ${CATEGORY_CACHE_TTL_SECONDS:-300}
+      DASHBOARD_CACHE_TTL_SECONDS: ${DASHBOARD_CACHE_TTL_SECONDS:-15}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-2h}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      JWT_ISSUER: ${JWT_ISSUER:?}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:?}
+      CUSTOMER_SMS_PROVIDER: http
+      SMS_HTTP_ENDPOINT: ${SMS_HTTP_ENDPOINT:?}
+      SMS_HTTP_TOKEN: ${SMS_HTTP_TOKEN:?}
+      SMS_TEMPLATE_ID: ${SMS_TEMPLATE_ID:?}
+      SMS_HTTP_TIMEOUT_MS: ${SMS_HTTP_TIMEOUT_MS:-5000}
+      OBJECT_STORAGE_PROVIDER: ${OBJECT_STORAGE_PROVIDER:-s3}
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?}
+      STORAGE_REGION: ${STORAGE_REGION:?}
+      STORAGE_BUCKET: ${STORAGE_BUCKET:?}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?}
+      STORAGE_CDN_BASE_URL: ${STORAGE_CDN_BASE_URL:?}
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/v1/health/ready').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks: [backend]
+    logging: *default-logging
+
+  admin:
+    image: ${ADMIN_IMAGE:?}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [frontend]
+    logging: *default-logging
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?}
+    volumes:
+      - ./nginx/default.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      api: { condition: service_healthy }
+      admin: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "wget", "--no-check-certificate", "-q", "-O", "-", "https://127.0.0.1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [frontend, backend]
+    logging: *default-logging
+
+  backup:
+    image: ${BACKUP_IMAGE:?}
+    profiles: ["operations"]
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_DATABASE: ${MYSQL_DATABASE:?}
+      MYSQL_USER: root
+      MYSQL_PASSWORD: ${MYSQL_ROOT_PASSWORD:?}
+      BACKUP_DIR: /backups
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+    volumes:
+      - ${BACKUP_HOST_DIR:-/srv/fruit-b2b/backups}:/backups
+    depends_on:
+      mysql: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "grep -aq crond /proc/1/cmdline"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks: [backend]
+    logging: *default-logging
+
+volumes:
+  mysql_data:
+  redis_data:
+
+networks:
+  frontend:
+  backend:
+    internal: true
