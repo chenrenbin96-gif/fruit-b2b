@@ -429,7 +429,7 @@ export class ProductsService {
         mediaType: 'IMAGE',
         status: 'ENABLE',
       });
-      if (imageCount === 0) {
+      if (!product.mainImage && imageCount === 0) {
         throw new BadRequestException({
           code: 'PRODUCT_MAIN_IMAGE_REQUIRED',
           message: '商品至少需要一张启用主图才能上架',
