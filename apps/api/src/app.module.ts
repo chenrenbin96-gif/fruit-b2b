@@ -25,6 +25,7 @@ import { UploadsModule } from './modules/uploads/uploads.module';
 import { AfterSalesModule } from './modules/after-sales/after-sales.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
+import { ReportsModule } from './modules/reports/reports.module';
 
 @Module({
   imports: [
@@ -68,6 +69,7 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
     SystemModule,
     UploadsModule,
     AfterSalesModule,
+    ReportsModule,
   ],
   providers: [
     {

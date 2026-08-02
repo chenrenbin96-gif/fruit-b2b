@@ -34,6 +34,8 @@ export type Product = {
   available_quantity?: string;
   recent_purchase_price?: string | null;
   updated_at?: string;
+  purchase_manager_id?: string | null;
+  purchase_manager_name?: string | null;
 };
 
 export type ProductDescription = {
@@ -78,6 +80,8 @@ export type Sku = {
   market_price: string;
   stock_warning: string;
   status: 'ACTIVE' | 'DISABLED';
+  purchase_manager_id: string | null;
+  purchase_manager_name: string | null;
   inventory?: {
     stock_quantity: string;
     locked_quantity: string;
@@ -369,11 +373,12 @@ export const catalogApi = {
   async setProductStatus(id: string, status: Product['status']): Promise<void> {
     await apiClient.patch(`/admin/products/${id}/status`, { status });
   },
-  async listSkus(params: Record<string, unknown> = {}): Promise<Sku[]> {
+  async listSkus(params: Record<string, unknown> = {}): Promise<{items:Sku[];pagination:{page:number;page_size:number;total:number;total_pages:number}}> {
     return (
-      await apiClient.get<Envelope<Sku[]>>('/admin/skus', { params })
+      await apiClient.get<Envelope<{items:Sku[];pagination:{page:number;page_size:number;total:number;total_pages:number}}>>('/admin/skus', { params })
     ).data.data;
   },
+  async purchaseManagers():Promise<Array<{id:string;name:string;phone:string|null;role_code:string;department:string}>>{return (await apiClient.get<Envelope<Array<{id:string;name:string;phone:string|null;role_code:string;department:string}>>>('/admin/products/purchase-managers')).data.data;},
   async saveSku(
     id: string | null,
     data: Record<string, unknown>,

@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 
 import { catalogApi, type CategoryNode, type Product } from '@/api/catalog';
 import { useAuthStore } from '@/stores/auth';
+import AppPagination from '@/components/AppPagination.vue';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -13,6 +14,7 @@ const products = ref<Product[]>([]);
 const categories = ref<CategoryNode[]>([]);
 const selected = ref<Product[]>([]);
 const createDialog = ref(false);
+const total=ref(0),page=ref(1),pageSize=ref(20),managers=ref<Awaited<ReturnType<typeof catalogApi.purchaseManagers>>>([]);
 const filters = reactive({
   keyword: '',
   category_id: '',
@@ -29,6 +31,7 @@ const form = reactive({
   brand: '',
   grade: '' as '' | 'A' | 'B' | 'C' | '特级',
   description: '',
+  purchase_manager_id:'',
 });
 const leafCategories = computed(() =>
   categories.value.flatMap((parent) =>
@@ -42,7 +45,7 @@ const leafCategories = computed(() =>
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const [tree, result] = await Promise.all([
+    const [tree, result, managerRows] = await Promise.all([
       catalogApi.categoryTree(),
       catalogApi.listProducts({
         keyword: filters.keyword || undefined,
@@ -50,11 +53,13 @@ async function load(): Promise<void> {
         status: filters.status || undefined,
         sale_type: filters.sale_type || undefined,
         inventory_status: filters.inventory_status || undefined,
-        page_size: 100,
+        page:page.value,page_size:pageSize.value,
       }),
+      catalogApi.purchaseManagers(),
     ]);
     categories.value = tree;
     products.value = result.items;
+    total.value=result.pagination.total;managers.value=managerRows;
   } finally {
     loading.value = false;
   }
@@ -68,7 +73,7 @@ function reset(): void {
     sale_type: '',
     inventory_status: '',
   });
-  void load();
+  page.value=1;void load();
 }
 
 function openCreate(): void {
@@ -81,9 +86,12 @@ function openCreate(): void {
     brand: '',
     grade: '',
     description: '',
+    purchase_manager_id:'',
   });
   createDialog.value = true;
 }
+
+function changePage(nextPage:number,nextSize:number){page.value=nextPage;pageSize.value=nextSize;void load();}
 
 async function create(): Promise<void> {
   await catalogApi.saveProduct(null, {
@@ -211,6 +219,7 @@ onMounted(load);
         <ElTableColumn label="状态" width="100"><template #default="{row}"><ElTag :type="row.status === 'ON_SALE' ? 'success' : 'info'">{{ row.status === 'ON_SALE' ? '销售中' : row.status === 'DRAFT' ? '草稿' : '已下架' }}</ElTag></template></ElTableColumn>
         <ElTableColumn prop="brand" label="品牌" width="120" />
         <ElTableColumn prop="origin" label="产地" width="120" />
+        <ElTableColumn prop="purchase_manager_name" label="采购负责人" width="120" />
         <ElTableColumn label="最近采购价" width="120"><template #default="{row}">{{ row.recent_purchase_price ? `¥${row.recent_purchase_price}` : '—' }}</template></ElTableColumn>
         <ElTableColumn label="更新时间" width="180"><template #default="{row}">{{ row.updated_at ? new Date(row.updated_at).toLocaleString() : '—' }}</template></ElTableColumn>
         <ElTableColumn label="操作" fixed="right" width="250">
@@ -222,6 +231,7 @@ onMounted(load);
           </template>
         </ElTableColumn>
       </ElTable>
+      <AppPagination :page="page" :page-size="pageSize" :total="total" @change="changePage" />
     </div>
 
     <ElDialog v-model="createDialog" title="新建商品" width="660">
@@ -234,6 +244,7 @@ onMounted(load);
           <ElFormItem label="商品等级"><ElSelect v-model="form.grade" clearable style="width:100%"><ElOption v-for="grade in ['A','B','C','特级']" :key="grade" :label="grade" :value="grade" /></ElSelect></ElFormItem>
           <ElFormItem label="产地"><ElInput v-model="form.origin" /></ElFormItem>
           <ElFormItem label="品牌"><ElInput v-model="form.brand" /></ElFormItem>
+          <ElFormItem label="采购负责人"><ElSelect v-model="form.purchase_manager_id" clearable filterable style="width:100%"><ElOption v-for="m in managers" :key="m.id" :label="`${m.name} · ${m.role_code}`" :value="m.id"/></ElSelect></ElFormItem>
         </div>
         <ElFormItem label="商品描述"><ElInput v-model="form.description" type="textarea" :rows="4" /></ElFormItem>
       </ElForm>

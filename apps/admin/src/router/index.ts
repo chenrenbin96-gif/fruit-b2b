@@ -185,6 +185,9 @@ const routes: RouteRecordRaw[] = [
       },
       { path: 'after-sales', name: 'after-sales', component: () => import('@/views/after-sales/AfterSalesView.vue'), meta: { title: '售后管理', permission: 'after.sale.read' } },
       { path: 'after-sale-reasons', name: 'after-sale-reasons', component: () => import('@/views/after-sales/AfterSaleReasonsView.vue'), meta: { title: '售后原因设置', permission: 'after.sale.reason.manage' } },
+      ...[
+        ['business','营业报表'],['products','商品销售'],['orders','订单统计'],['customers','客户统计'],['purchases','采购统计'],['estimated-margin','预计毛利'],['sales-margin','销售毛利'],['profit','利润报表'],
+      ].map(([reportType,title])=>({path:`reports/${reportType}`,component:()=>import('@/views/reports/ReportCenterView.vue'),meta:{title:`报表中心 / ${title}`,permission:'report.read',reportType}})),
     ],
   },
   {

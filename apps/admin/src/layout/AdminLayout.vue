@@ -132,6 +132,12 @@ async function logout(): Promise<void> {
         <ElMenuItem v-permission="'operation_log.read'" index="/operation-logs">
           操作日志
         </ElMenuItem>
+        <ElSubMenu v-permission="'report.read'" index="report-center"><template #title>报表中心</template>
+          <ElMenuItem index="/reports/business">营业报表</ElMenuItem><ElMenuItem index="/reports/products">商品销售</ElMenuItem>
+          <ElMenuItem index="/reports/orders">订单统计</ElMenuItem><ElMenuItem index="/reports/customers">客户统计</ElMenuItem>
+          <ElMenuItem index="/reports/purchases">采购统计</ElMenuItem><ElMenuItem index="/reports/estimated-margin">预计毛利</ElMenuItem>
+          <ElMenuItem index="/reports/sales-margin">销售毛利</ElMenuItem><ElMenuItem index="/reports/profit">利润报表</ElMenuItem>
+        </ElSubMenu>
       </ElMenu>
     </aside>
 

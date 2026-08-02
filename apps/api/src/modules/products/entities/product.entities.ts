@@ -102,6 +102,12 @@ export class ProductEntity {
   @Column({ type: 'text', nullable: true })
   description!: string | null;
 
+  @Column({ name: 'purchase_manager_id', type: 'bigint', unsigned: true, nullable: true })
+  purchaseManagerId!: string | null;
+
+  @Column({ name: 'purchase_manager_name', type: 'varchar', length: 50, nullable: true })
+  purchaseManagerName!: string | null;
+
   @Column({ type: 'varchar', length: 20, default: 'DRAFT' })
   status!: ProductStatus;
 
@@ -138,6 +144,12 @@ export class SkuEntity {
 
   @Column({ name: 'product_id', type: 'bigint', unsigned: true })
   productId!: string;
+
+  @Column({ name: 'purchase_manager_id', type: 'bigint', unsigned: true, nullable: true })
+  purchaseManagerId!: string | null;
+
+  @Column({ name: 'purchase_manager_name', type: 'varchar', length: 50, nullable: true })
+  purchaseManagerName!: string | null;
 
   @Column({ name: 'sku_code', type: 'varchar', length: 50 })
   skuCode!: string;

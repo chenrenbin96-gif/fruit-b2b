@@ -158,10 +158,12 @@ onMounted(load);
       <ElPagination
         v-model:current-page="query.page"
         v-model:page-size="query.page_size"
+        :page-sizes="[20, 50, 100]"
         :total="total"
-        layout="prev, pager, next, total"
+        layout="total, sizes, prev, pager, next, jumper"
         style="margin-top: 18px; justify-content: flex-end"
         @current-change="load"
+        @size-change="load"
       />
     </div>
 

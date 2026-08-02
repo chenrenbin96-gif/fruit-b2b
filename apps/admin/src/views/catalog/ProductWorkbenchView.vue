@@ -22,6 +22,7 @@ const saving = ref(false);
 const activeTab = ref('basic');
 const workbench = ref<ProductWorkbench | null>(null);
 const categories = ref<CategoryNode[]>([]);
+const purchaseManagers = ref<Awaited<ReturnType<typeof catalogApi.purchaseManagers>>>([]);
 const priceReferences = ref<Awaited<ReturnType<typeof catalogApi.priceReferences>> | null>(null);
 const skuDialog = ref(false);
 const editingSkuId = ref<string | null>(null);
@@ -40,6 +41,7 @@ const form = reactive({
   brand: '',
   grade: '' as '' | 'A' | 'B' | 'C' | '特级',
   description: '',
+  purchase_manager_id: '',
   status: 'DRAFT' as 'DRAFT' | 'ON_SALE' | 'OFF_SALE',
 });
 const skuForm = reactive({
@@ -59,6 +61,7 @@ const skuForm = reactive({
   market_price: 0,
   stock_warning: 0,
   status: 'ACTIVE' as 'ACTIVE' | 'DISABLED',
+  purchase_manager_id: '',
 });
 const priceForm = reactive({
   sku_id: '',
@@ -99,17 +102,20 @@ async function load(): Promise<void> {
       Promise<ProductWorkbench>,
       Promise<CategoryNode[]>,
       Promise<Awaited<ReturnType<typeof catalogApi.priceReferences>> | null>,
+      Promise<Awaited<ReturnType<typeof catalogApi.purchaseManagers>>>,
     ] = [
       catalogApi.productWorkbench(productId),
       catalogApi.categoryTree(),
       auth.hasPermission('price.read')
         ? catalogApi.priceReferences()
         : Promise.resolve(null),
+      catalogApi.purchaseManagers(),
     ];
-    const [data, tree, refs] = await Promise.all(requests);
+    const [data, tree, refs, managers] = await Promise.all(requests);
     workbench.value = data;
     categories.value = tree;
     priceReferences.value = refs;
+    purchaseManagers.value = managers;
     Object.assign(form, {
       category_id: data.product.category_id,
       product_code: data.product.product_code,
@@ -120,6 +126,7 @@ async function load(): Promise<void> {
       brand: data.product.brand ?? '',
       grade: data.product.grade ?? '',
       description: data.product.description ?? '',
+      purchase_manager_id: data.product.purchase_manager_id ?? '',
       status: data.product.status,
     });
   } finally {
@@ -146,6 +153,7 @@ async function saveBasic(): Promise<void> {
         product_code: form.product_code,
         barcode: form.barcode || undefined,
         status: form.status,
+        purchase_manager_id: form.purchase_manager_id || undefined,
       });
     } else {
       await catalogApi.saveProductDisplay(productId, display);
@@ -235,6 +243,8 @@ function openSku(row?: Sku): void {
     market_price: Number(row?.market_price ?? row?.base_price ?? 0),
     stock_warning: Number(row?.stock_warning ?? 0),
     status: row?.status ?? 'ACTIVE',
+    purchase_manager_id:
+      row?.purchase_manager_id ?? product.value?.purchase_manager_id ?? '',
   });
   skuDialog.value = true;
 }
@@ -265,6 +275,7 @@ async function saveSku(): Promise<void> {
     market_price: skuForm.market_price,
     stock_warning: skuForm.stock_warning,
     status: skuForm.status,
+    purchase_manager_id: skuForm.purchase_manager_id || undefined,
   });
   skuDialog.value = false;
   ElMessage.success('SKU已保存');
@@ -426,6 +437,11 @@ onMounted(load);
               </ElFormItem>
               <ElFormItem label="产地"><ElInput v-model="form.origin" :disabled="!canDisplayEdit" /></ElFormItem>
               <ElFormItem label="品牌"><ElInput v-model="form.brand" :disabled="!canDisplayEdit" /></ElFormItem>
+              <ElFormItem label="采购负责人">
+                <ElSelect v-model="form.purchase_manager_id" :disabled="!canFullEdit" clearable filterable style="width:100%">
+                  <ElOption v-for="item in purchaseManagers" :key="item.id" :label="`${item.name} · ${item.role_code}`" :value="item.id" />
+                </ElSelect>
+              </ElFormItem>
               <ElFormItem label="销售模式">
                 <ElInput :model-value="[...new Set(skus.map(item => item.sale_type === 'PIECE' ? '按件' : '固定重量'))].join(' / ') || '请在SKU中配置'" disabled />
               </ElFormItem>
@@ -470,6 +486,7 @@ onMounted(load);
             <ElTableColumn label="库存" width="130"><template #default="{row}">{{ row.inventory?.available_quantity ?? '0.000' }} {{ row.stock_unit }}</template></ElTableColumn>
             <ElTableColumn prop="cost_price" label="成本价" width="100" />
             <ElTableColumn prop="base_price" label="销售价" width="100" />
+            <ElTableColumn prop="purchase_manager_name" label="采购负责人" min-width="120" />
             <ElTableColumn prop="status" label="状态" width="100" />
             <ElTableColumn v-if="canSkuEdit" label="操作" width="140">
               <template #default="{row}"><ElButton link @click="openSku(row)">编辑</ElButton><ElButton link type="danger" @click="deleteSku(row)">删除</ElButton></template>
@@ -590,6 +607,7 @@ onMounted(load);
           <ElFormItem label="销售价"><ElInputNumber v-model="skuForm.base_price" :min="0" /></ElFormItem>
           <ElFormItem label="市场价"><ElInputNumber v-model="skuForm.market_price" :min="0" /></ElFormItem>
           <ElFormItem label="最低库存"><ElInputNumber v-model="skuForm.stock_warning" :min="0" /></ElFormItem>
+          <ElFormItem label="采购负责人"><ElSelect v-model="skuForm.purchase_manager_id" clearable filterable style="width:100%"><ElOption v-for="item in purchaseManagers" :key="item.id" :label="`${item.name} · ${item.role_code}`" :value="item.id" /></ElSelect></ElFormItem>
         </div>
       </ElForm>
       <template #footer><ElButton @click="skuDialog=false">取消</ElButton><ElButton type="primary" @click="saveSku">保存</ElButton></template>

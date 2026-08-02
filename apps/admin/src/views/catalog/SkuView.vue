@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { ElMessage } from 'element-plus';
+import AppPagination from '@/components/AppPagination.vue';
 
 import {
   catalogApi,
@@ -13,6 +14,7 @@ const dialogVisible = ref(false);
 const editingId = ref<string | null>(null);
 const skus = ref<Sku[]>([]);
 const products = ref<Product[]>([]);
+const managers=ref<Awaited<ReturnType<typeof catalogApi.purchaseManagers>>>([]),keyword=ref(''),managerId=ref(''),page=ref(1),pageSize=ref(20),total=ref(0);
 const form = reactive({
   product_id: '',
   sku_code: '',
@@ -31,6 +33,7 @@ const form = reactive({
   market_price: 0,
   stock_warning: 0,
   status: 'ACTIVE' as 'ACTIVE' | 'DISABLED',
+  purchase_manager_id:'',
 });
 const unitLabel = computed(() =>
   '销售单位',
@@ -46,12 +49,14 @@ watch(
 async function load(): Promise<void> {
   loading.value = true;
   try {
-    const [skuRows, productRows] = await Promise.all([
-      catalogApi.listSkus(),
+    const [skuResult, productRows,managerRows] = await Promise.all([
+      catalogApi.listSkus({keyword:keyword.value||undefined,purchase_manager_id:managerId.value||undefined,page:page.value,page_size:pageSize.value}),
       catalogApi.listProducts({ page_size: 100 }),
+      catalogApi.purchaseManagers(),
     ]);
-    skus.value = skuRows;
+    skus.value = skuResult.items;total.value=skuResult.pagination.total;
     products.value = productRows.items;
+    managers.value=managerRows;
   } finally {
     loading.value = false;
   }
@@ -77,6 +82,7 @@ function openCreate(): void {
     market_price: 0,
     stock_warning: 0,
     status: 'ACTIVE',
+    purchase_manager_id:'',
   });
   dialogVisible.value = true;
 }
@@ -101,6 +107,7 @@ function openEdit(row: Sku): void {
     market_price: Number(row.market_price ?? row.base_price),
     stock_warning: Number(row.stock_warning),
     status: row.status,
+    purchase_manager_id:row.purchase_manager_id??'',
   });
   dialogVisible.value = true;
 }
@@ -141,6 +148,7 @@ async function save(): Promise<void> {
     market_price: form.market_price,
     stock_warning: form.stock_warning,
     status: form.status,
+    purchase_manager_id:form.purchase_manager_id||undefined,
   });
   ElMessage.success('SKU已保存');
   dialogVisible.value = false;
@@ -157,6 +165,7 @@ async function toggleStatus(row: Sku): Promise<void> {
 }
 
 onMounted(load);
+function changePage(nextPage:number,nextSize:number){page.value=nextPage;pageSize.value=nextSize;void load();}
 </script>
 
 <template>
@@ -175,6 +184,7 @@ onMounted(load);
       </ElButton>
     </div>
     <div class="management-card">
+      <div class="sku-filter"><ElInput v-model="keyword" clearable placeholder="SKU/商品/采购负责人" @keyup.enter="load"/><ElSelect v-model="managerId" clearable filterable placeholder="采购负责人"><ElOption v-for="m in managers" :key="m.id" :label="m.name" :value="m.id"/></ElSelect><ElButton type="primary" @click="page=1;load()">查询</ElButton></div>
       <ElTable v-loading="loading" :data="skus">
         <ElTableColumn prop="sku_code" label="SKU编码" width="140" />
         <ElTableColumn prop="product_name" label="商品" min-width="150" />
@@ -194,6 +204,9 @@ onMounted(load);
           </template>
         </ElTableColumn>
         <ElTableColumn prop="stock_unit" label="库存单位" width="100" />
+        <ElTableColumn prop="purchase_manager_name" label="采购负责人" width="120"/>
+        <ElTableColumn label="负责人手机" width="130"><template #default="{row}">{{managers.find(x=>x.id===row.purchase_manager_id)?.phone||'—'}}</template></ElTableColumn>
+        <ElTableColumn label="部门" width="110"><template #default="{row}">{{managers.find(x=>x.id===row.purchase_manager_id)?.department||'—'}}</template></ElTableColumn>
         <ElTableColumn label="基础价" width="120">
           <template #default="{ row }">
             ¥{{ row.base_price }}/{{ row.price_unit }}
@@ -220,6 +233,7 @@ onMounted(load);
           </template>
         </ElTableColumn>
       </ElTable>
+      <AppPagination :page="page" :page-size="pageSize" :total="total" @change="changePage"/>
     </div>
 
     <ElDialog
@@ -241,6 +255,7 @@ onMounted(load);
         <ElFormItem label="SKU编码">
           <ElInput v-model="form.sku_code" />
         </ElFormItem>
+        <ElFormItem label="采购负责人"><ElSelect v-model="form.purchase_manager_id" clearable filterable style="width:100%"><ElOption v-for="m in managers" :key="m.id" :label="`${m.name} · ${m.role_code}`" :value="m.id"/></ElSelect></ElFormItem>
         <ElFormItem label="规格名称">
           <ElInput v-model="form.sku_name" />
         </ElFormItem>
@@ -319,3 +334,4 @@ onMounted(load);
     </ElDialog>
   </section>
 </template>
+<style scoped>.sku-filter{display:flex;gap:10px;margin-bottom:16px}.sku-filter .el-input{width:280px}.sku-filter .el-select{width:180px}</style>

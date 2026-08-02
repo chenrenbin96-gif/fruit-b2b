@@ -1,14 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import { getAuditLogs } from '@/api/audit';
+import AppPagination from '@/components/AppPagination.vue';
 
 const rows = ref<Awaited<ReturnType<typeof getAuditLogs>>>([]);
 const moduleCode = ref('');
+const page = ref(1);
+const pageSize = ref(20);
+const pagedRows = computed(() => rows.value.slice((page.value - 1) * pageSize.value, page.value * pageSize.value));
 
 async function load() {
   rows.value = await getAuditLogs(moduleCode.value);
+  page.value = 1;
 }
+
+function changePage(nextPage: number, nextSize: number) { page.value = nextPage; pageSize.value = nextSize; }
 
 onMounted(load);
 </script>
@@ -24,7 +31,7 @@ onMounted(load);
           <ElOption v-for="item in ['PRICE','INVENTORY','ORDER','FULFILLMENT','COUPON','FINANCE']" :key="item" :label="item" :value="item" />
         </ElSelect>
       </div>
-      <ElTable :data="rows">
+      <ElTable :data="pagedRows">
         <ElTableColumn prop="created_at" label="时间" min-width="180" />
         <ElTableColumn prop="operator_name" label="操作人" width="130" />
         <ElTableColumn prop="module_code" label="模块" width="120" />
@@ -41,6 +48,7 @@ onMounted(load);
           </template>
         </ElTableColumn>
       </ElTable>
+      <AppPagination :page="page" :page-size="pageSize" :total="rows.length" @change="changePage" />
     </div>
   </section>
 </template>

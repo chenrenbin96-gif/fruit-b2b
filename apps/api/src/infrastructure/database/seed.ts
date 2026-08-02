@@ -92,6 +92,8 @@ const permissionDefinitions = [
   ['after.sale.manage', '审核售后申请', 'after_sale'],
   ['after.sale.reason.manage', '管理售后原因', 'after_sale'],
   ['after.sale.refund.manage', '完成售后退款', 'after_sale'],
+  ['report.read', '查看报表中心', 'report'],
+  ['report.export', '导出报表', 'report'],
 ] as const;
 
 async function seed(manager: EntityManager): Promise<void> {
@@ -310,6 +312,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'after.sale.read',
         'customer.center.read',
         'after.sale.refund.manage',
+        'report.read','report.export',
       ],
     },
     {
@@ -330,6 +333,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'warehouse.task.read',
         'after.sale.read',
         'customer.center.read',
+        'report.read',
       ],
     },
     {

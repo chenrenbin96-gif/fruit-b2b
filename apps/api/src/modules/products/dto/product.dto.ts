@@ -102,6 +102,10 @@ export class CreateProductDto {
   description?: string;
 
   @IsOptional()
+  @IsNumberString()
+  purchase_manager_id?: string;
+
+  @IsOptional()
   @IsIn(productStatuses)
   status?: (typeof productStatuses)[number];
 }
@@ -230,6 +234,10 @@ export class CreateSkuDto {
   @IsNumberString()
   product_id!: string;
 
+  @IsOptional()
+  @IsNumberString()
+  purchase_manager_id?: string;
+
   @IsString()
   @Length(1, 50)
   sku_code!: string;
@@ -341,4 +349,16 @@ export class SkuListQueryDto {
   @IsOptional()
   @IsIn(statuses)
   status?: (typeof statuses)[number];
+
+  @IsOptional()
+  @IsNumberString()
+  purchase_manager_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  keyword?: string;
+
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) page_size = 20;
 }

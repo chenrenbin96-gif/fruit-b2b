@@ -358,6 +358,7 @@ export class ProductsService {
 
   async create(tenantId: string, dto: CreateProductDto) {
     await this.requireLeafCategory(tenantId, dto.category_id);
+    const manager = await this.purchaseManager(tenantId, dto.purchase_manager_id);
     const product = this.products.create({
       tenantId,
       categoryId: dto.category_id,
@@ -369,6 +370,8 @@ export class ProductsService {
       brand: dto.brand?.trim() ?? null,
       grade: dto.grade ?? null,
       description: dto.description?.trim() ?? null,
+      purchaseManagerId: manager?.id ?? null,
+      purchaseManagerName: manager?.name ?? null,
       status: dto.status ?? 'DRAFT',
     });
     return this.simpleProductView(await this.products.save(product));
@@ -377,6 +380,7 @@ export class ProductsService {
   async update(tenantId: string, id: string, dto: UpdateProductDto) {
     const product = await this.requireProduct(tenantId, id);
     await this.requireLeafCategory(tenantId, dto.category_id);
+    const manager = await this.purchaseManager(tenantId, dto.purchase_manager_id);
     Object.assign(product, {
       categoryId: dto.category_id,
       productCode: dto.product_code.trim(),
@@ -387,6 +391,8 @@ export class ProductsService {
       brand: dto.brand?.trim() ?? null,
       grade: dto.grade ?? null,
       description: dto.description?.trim() ?? null,
+      purchaseManagerId: manager?.id ?? null,
+      purchaseManagerName: manager?.name ?? null,
       status: dto.status ?? product.status,
     });
     return this.simpleProductView(await this.products.save(product));
@@ -447,25 +453,34 @@ export class ProductsService {
   }
 
   async listSkus(tenantId: string, query: SkuListQueryDto) {
-    const skus = await this.skus.find({
-      where: {
-        tenantId,
-        ...(query.product_id ? { productId: query.product_id } : {}),
-        ...(query.sale_type ? { saleType: query.sale_type } : {}),
-        ...(query.status ? { status: query.status } : {}),
-      },
-      relations: { product: true },
-      order: { id: 'DESC' },
-    });
-    return Promise.all(skus.map((sku) => this.skuView(sku, true)));
+    const builder=this.skus.createQueryBuilder('sku').leftJoinAndSelect('sku.product','product')
+      .where('sku.tenant_id=:tenantId',{tenantId});
+    if(query.product_id) builder.andWhere('sku.product_id=:productId',{productId:query.product_id});
+    if(query.sale_type) builder.andWhere('sku.sale_type=:saleType',{saleType:query.sale_type});
+    if(query.status) builder.andWhere('sku.status=:status',{status:query.status});
+    if(query.purchase_manager_id) builder.andWhere('sku.purchase_manager_id=:managerId',{managerId:query.purchase_manager_id});
+    if(query.keyword) builder.andWhere('(sku.sku_code LIKE :keyword OR sku.sku_name LIKE :keyword OR product.name LIKE :keyword OR sku.purchase_manager_name LIKE :keyword)',{keyword:`%${query.keyword.trim()}%`});
+    const [skus,total]=await builder.orderBy('sku.id','DESC').skip((query.page-1)*query.page_size).take(query.page_size).getManyAndCount();
+    return {items:await Promise.all(skus.map((sku)=>this.skuView(sku,true))),pagination:{page:query.page,page_size:query.page_size,total,total_pages:Math.ceil(total/query.page_size)}};
+  }
+
+  async purchaseManagers(tenantId:string){
+    return this.dataSource.query(`SELECT u.id,u.name,u.phone,r.role_code AS role_code,COALESCE(w.warehouse_name,'总部') AS department
+      FROM users u JOIN roles r ON r.id=u.role_id AND r.tenant_id=u.tenant_id
+      LEFT JOIN warehouses w ON w.id=u.warehouse_id
+      WHERE u.tenant_id=? AND u.status='ACTIVE' AND u.deleted_at IS NULL
+      ORDER BY FIELD(r.role_code,'PURCHASER','ADMIN','SALES'),u.name`,[tenantId]);
   }
 
   async createSku(tenantId: string, dto: CreateSkuDto) {
     await this.requireProduct(tenantId, dto.product_id);
+    const manager = await this.purchaseManager(tenantId, dto.purchase_manager_id);
     this.validateUnits(dto);
     const sku = this.skus.create({
       tenantId,
       productId: dto.product_id,
+      purchaseManagerId: manager?.id ?? null,
+      purchaseManagerName: manager?.name ?? null,
       skuCode: dto.sku_code.trim(),
       skuName: dto.sku_name.trim(),
       specification: dto.specification?.trim() ?? null,
@@ -505,6 +520,7 @@ export class ProductsService {
   async updateSku(tenantId: string, id: string, dto: UpdateSkuDto) {
     const sku = await this.requireSku(tenantId, id);
     await this.requireProduct(tenantId, dto.product_id);
+    const manager = await this.purchaseManager(tenantId, dto.purchase_manager_id);
     this.validateUnits(dto);
     const hasInventory = await this.inventory.countBy({ tenantId, skuId: id });
     if (
@@ -518,6 +534,8 @@ export class ProductsService {
     }
     Object.assign(sku, {
       productId: dto.product_id,
+      purchaseManagerId: manager?.id ?? null,
+      purchaseManagerName: manager?.name ?? null,
       skuCode: dto.sku_code.trim(),
       skuName: dto.sku_name.trim(),
       specification: dto.specification?.trim() ?? null,
@@ -611,6 +629,8 @@ export class ProductsService {
           brand: source.brand,
           grade: source.grade,
           description: source.description,
+          purchaseManagerId: source.purchaseManagerId,
+          purchaseManagerName: source.purchaseManagerName,
           status: 'DRAFT',
         }),
       );
@@ -620,6 +640,8 @@ export class ProductsService {
           manager.create(SkuEntity, {
             tenantId,
             productId: product.id,
+            purchaseManagerId: sku.purchaseManagerId,
+            purchaseManagerName: sku.purchaseManagerName,
             skuCode: `${sku.skuCode.slice(0, 38)}-CP${suffix}`,
             skuName: sku.skuName,
             specification: sku.specification,
@@ -861,6 +883,8 @@ export class ProductsService {
       brand: product.brand,
       grade: product.grade,
       description: product.description,
+      purchase_manager_id: product.purchaseManagerId,
+      purchase_manager_name: product.purchaseManagerName,
       status: product.status,
       created_at: product.createdAt,
       updated_at: product.updatedAt,
@@ -894,6 +918,8 @@ export class ProductsService {
       id: sku.id,
       product_id: sku.productId,
       product_name: sku.product?.name,
+      purchase_manager_id: sku.purchaseManagerId,
+      purchase_manager_name: sku.purchaseManagerName,
       sku_code: sku.skuCode,
       sku_name: sku.skuName,
       specification: sku.specification,
@@ -921,6 +947,13 @@ export class ProductsService {
 
   private sum(values: string[]): string {
     return values.reduce((sum, value) => sum + Number(value), 0).toFixed(3);
+  }
+
+  private async purchaseManager(tenantId:string,id?:string){
+    if(!id)return null;
+    const rows=await this.dataSource.query(`SELECT id,name FROM users WHERE id=? AND tenant_id=? AND status='ACTIVE' AND deleted_at IS NULL LIMIT 1`,[id,tenantId]) as Array<{id:string;name:string}>;
+    if(!rows[0])throw new BadRequestException('采购负责人不存在或已停用');
+    return rows[0];
   }
 
   private catalogGrade(

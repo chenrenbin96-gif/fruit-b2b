@@ -1,0 +1,7 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+const props=defineProps<{rows:Array<Record<string,any>>}>();
+const points=computed(()=>{const values=props.rows.map(x=>Number(x.sales_amount??x.value??0));const max=Math.max(...values,1);return values.map((v,i)=>`${props.rows.length===1?50:(i/(props.rows.length-1))*100},${92-(v/max)*78}`).join(' ');});
+</script>
+<template><div class="trend"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16a34a" stop-opacity=".28"/><stop offset="1" stop-color="#16a34a" stop-opacity=".02"/></linearGradient></defs><polyline v-if="points" :points="`${points} 100,100 0,100`" fill="url(#fill)" stroke="none"/><polyline v-if="points" :points="points" fill="none" stroke="#16a34a" stroke-width="1.4" vector-effect="non-scaling-stroke"/></svg><div class="labels"><span v-for="x in rows" :key="x.report_date">{{String(x.report_date??'').slice(5)}}</span></div><ElEmpty v-if="!rows.length" description="暂无趋势数据" :image-size="70"/></div></template>
+<style scoped>.trend{height:260px;position:relative;background:repeating-linear-gradient(to bottom,#fff 0,#fff 51px,#eef2f0 52px);border-radius:12px;padding:12px 10px 30px}.trend svg{width:100%;height:210px}.labels{display:flex;justify-content:space-between;color:#87918b;font-size:11px}.el-empty{position:absolute;inset:0}</style>

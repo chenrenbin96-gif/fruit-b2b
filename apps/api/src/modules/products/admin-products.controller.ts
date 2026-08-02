@@ -98,6 +98,10 @@ export class AdminProductsController {
     return this.products.list(principal.tenantId, query);
   }
 
+  @Get('products/purchase-managers')
+  @RequirePermissions('product.read')
+  purchaseManagers(@CurrentPrincipal() principal:AuthPrincipal){return this.products.purchaseManagers(principal.tenantId);}
+
   @Post('products/batch')
   @RequirePermissions('product.manage')
   async batchProducts(
@@ -292,6 +296,8 @@ export class AdminProductsController {
   ) {
     const before = await this.products.listSkus(principal.tenantId, {
       product_id: dto.product_id,
+      page: 1,
+      page_size: 100,
     });
     const result = await this.products.updateSku(principal.tenantId, params.id, dto);
     await this.audit.record(this.audit.fromPrincipal(principal, {
@@ -299,7 +305,7 @@ export class AdminProductsController {
       actionCode: 'SKU_UPDATE',
       targetType: 'SKU',
       targetId: params.id,
-      before: { sku: before.find((item) => item.id === params.id) ?? null },
+      before: { sku: before.items.find((item) => item.id === params.id) ?? null },
       after: { sku: result },
     }));
     return result;

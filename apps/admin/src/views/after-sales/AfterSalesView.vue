@@ -34,7 +34,7 @@ onMounted(load);
         <ElTableColumn label="状态" width="100"><template #default="scope">{{ labels[scope.row.status] ?? scope.row.status }}</template></ElTableColumn>
         <ElTableColumn prop="created_at" label="申请时间" min-width="170" /><ElTableColumn label="操作" width="90"><template #default="scope"><ElButton link type="primary" @click="open(scope.row)">详情</ElButton></template></ElTableColumn>
       </ElTable>
-      <ElPagination v-model:current-page="query.page" :page-size="query.page_size" :total="total" layout="prev,pager,next,total" @current-change="load" />
+      <ElPagination v-model:current-page="query.page" v-model:page-size="query.page_size" :page-sizes="[20,50,100]" :total="total" layout="total,sizes,prev,pager,next,jumper" @current-change="load" @size-change="load" />
     </div>
     <ElDrawer v-model="visible" title="售后详情" size="720px">
       <div v-if="detail">
