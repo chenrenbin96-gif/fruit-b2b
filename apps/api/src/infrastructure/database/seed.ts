@@ -94,6 +94,9 @@ const permissionDefinitions = [
   ['after.sale.refund.manage', '完成售后退款', 'after_sale'],
   ['report.read', '查看报表中心', 'report'],
   ['report.export', '导出报表', 'report'],
+  ['bi.report.read', '查看BI分析', 'bi'],
+  ['bi.report.export', '导出BI报表', 'bi'],
+  ['bi.screen.read', '查看经营大屏', 'bi'],
 ] as const;
 
 async function seed(manager: EntityManager): Promise<void> {
@@ -231,6 +234,7 @@ async function seed(manager: EntityManager): Promise<void> {
       permissions: [
         'dashboard.read', 'customer.center.read', 'customer.center.manage',
         'customer.agreement.manage', 'order.read', 'finance.read',
+        'bi.report.read',
       ],
     },
     {
@@ -258,6 +262,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'purchase.receive',
         'shipping.read',
         'after.sale.read',
+        'bi.report.read',
       ],
     },
     {
@@ -286,6 +291,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'inventory.receive',
         'inventory.alert.read',
         'purchase.suggestion.read',
+        'bi.report.read',
       ],
     },
     {
@@ -312,7 +318,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'after.sale.read',
         'customer.center.read',
         'after.sale.refund.manage',
-        'report.read','report.export',
+        'report.read','report.export','bi.report.read','bi.report.export',
       ],
     },
     {
@@ -334,6 +340,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'after.sale.read',
         'customer.center.read',
         'report.read',
+        'bi.report.read',
       ],
     },
     {
@@ -346,6 +353,7 @@ async function seed(manager: EntityManager): Promise<void> {
         'delivery.task.update',
         'delivery.read',
         'delivery.update',
+        'bi.report.read',
       ],
     },
   ] as const;

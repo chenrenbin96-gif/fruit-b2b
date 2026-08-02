@@ -9,6 +9,12 @@ const router = useRouter();
 const auth = useAuthStore();
 
 const activeMenu = computed(() => route.path);
+const biMenus = computed(() => {
+  const role=auth.principal?.role_code;
+  const all:Array<[string,string]>=[['/bi/inventory','库存分析'],['/bi/delivery','配送分析'],['/bi/finance','财务分析'],['/bi/salespersons','业务员分析'],['/bi/customers','客户分析'],['/bi/products','商品分析'],['/bi/purchases','采购分析']];
+  const scoped:Record<string,string[]>={SALES:['/bi/salespersons','/bi/customers','/bi/products','/bi/finance'],PURCHASER:['/bi/purchases','/bi/products'],WAREHOUSE:['/bi/inventory'],DELIVERY:['/bi/delivery'],OPERATIONS:['/bi/inventory','/bi/customers','/bi/products']};
+  return role==='ADMIN'||role==='FINANCE'?all:all.filter(([path])=>(scoped[role??'']??[]).includes(path));
+});
 
 async function logout(): Promise<void> {
   await auth.logout();
@@ -138,6 +144,10 @@ async function logout(): Promise<void> {
           <ElMenuItem index="/reports/purchases">采购统计</ElMenuItem><ElMenuItem index="/reports/estimated-margin">预计毛利</ElMenuItem>
           <ElMenuItem index="/reports/sales-margin">销售毛利</ElMenuItem><ElMenuItem index="/reports/profit">利润报表</ElMenuItem>
         </ElSubMenu>
+        <ElSubMenu v-permission="'bi.report.read'" index="bi-center"><template #title>BI报表中心</template>
+          <ElMenuItem v-for="item in biMenus" :key="item[0]" :index="item[0]">{{item[1]}}</ElMenuItem>
+        </ElSubMenu>
+        <ElMenuItem v-permission="'bi.screen.read'" index="/business-screen">经营大屏</ElMenuItem>
       </ElMenu>
     </aside>
 

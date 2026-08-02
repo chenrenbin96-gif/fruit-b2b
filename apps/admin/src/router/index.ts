@@ -188,7 +188,16 @@ const routes: RouteRecordRaw[] = [
       ...[
         ['business','营业报表'],['products','商品销售'],['orders','订单统计'],['customers','客户统计'],['purchases','采购统计'],['estimated-margin','预计毛利'],['sales-margin','销售毛利'],['profit','利润报表'],
       ].map(([reportType,title])=>({path:`reports/${reportType}`,component:()=>import('@/views/reports/ReportCenterView.vue'),meta:{title:`报表中心 / ${title}`,permission:'report.read',reportType}})),
+      ...[
+        ['inventory','库存分析'],['delivery','配送分析'],['finance','财务分析'],['salespersons','业务员分析'],['customers','客户分析'],['products','商品分析'],['purchases','采购分析'],
+      ].map(([biType,title])=>({path:`bi/${biType}`,component:()=>import('@/views/reports/BiReportView.vue'),meta:{title:`BI报表中心 / ${title}`,permission:'bi.report.read',biType}})),
     ],
+  },
+  {
+    path: '/business-screen',
+    name: 'business-screen',
+    component: () => import('@/views/reports/BusinessScreenView.vue'),
+    meta: { requiresAuth: true, title: '经营大屏', permission: 'bi.screen.read' },
   },
   {
     path: '/:pathMatch(.*)*',

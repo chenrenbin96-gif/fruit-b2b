@@ -1,130 +1,23 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed,onBeforeUnmount,onMounted,ref } from 'vue';
+import { biApi,type BiDashboard } from '@/api/bi';
+import BiChart from '@/components/reports/BiChart.vue';
 
-import {
-  getManagementDashboard,
-  getWarehouseDashboard,
-  type ManagementDashboard,
-  type WarehouseDashboard,
-} from '@/api/dashboard';
-import { useAuthStore } from '@/stores/auth';
-
-const auth = useAuthStore();
-const loading = ref(false);
-const warehouse = ref<WarehouseDashboard | null>(null);
-const management = ref<ManagementDashboard | null>(null);
-const error = ref('');
-const canLoadWarehouse = computed(() => auth.hasPermission('order.read'));
-const canLoadManagement = computed(() =>
-  auth.hasPermission('dashboard.business.read'),
-);
-
-const warehouseCards = computed(() => [
-  { label: '今日订单', value: warehouse.value?.today_orders ?? 0 },
-  { label: '待审核', value: warehouse.value?.waiting_review ?? 0 },
-  { label: '待拣货', value: warehouse.value?.waiting_picking ?? 0 },
-  { label: '待称重', value: warehouse.value?.waiting_weighing ?? 0 },
-  { label: '待配送', value: warehouse.value?.waiting_delivery ?? 0 },
-  { label: '异常订单', value: warehouse.value?.exception_orders ?? 0 },
-]);
-
-const businessCards = computed(() => [
-  { label: '今日销售额', value: `¥${management.value?.sales.today_sales ?? '0.00'}` },
-  { label: '今日订单数', value: management.value?.sales.today_orders ?? 0 },
-  { label: '今日毛利', value: `¥${management.value?.sales.today_gross_profit ?? '0.00'}` },
-  { label: '今日毛利率', value: `${management.value?.sales.today_gross_margin_rate ?? '0.00'}%` },
-  { label: '库存金额', value: `¥${management.value?.inventory.stock_value ?? '0.00'}` },
-  { label: '低库存SKU', value: management.value?.inventory.low_stock_count ?? 0 },
-  { label: '新增客户', value: management.value?.customers.new_customers ?? 0 },
-  { label: '活跃客户', value: management.value?.customers.active_customers ?? 0 },
-]);
-
-async function load(): Promise<void> {
-  loading.value = true;
-  error.value = '';
-  try {
-    const [warehouseResult, managementResult] = await Promise.all([
-      canLoadWarehouse.value ? getWarehouseDashboard() : Promise.resolve(null),
-      canLoadManagement.value ? getManagementDashboard() : Promise.resolve(null),
-    ]);
-    warehouse.value = warehouseResult;
-    management.value = managementResult;
-  } catch {
-    error.value = '看板数据加载失败，请稍后重试';
-  } finally {
-    loading.value = false;
-  }
-}
-
-onMounted(load);
+const data=ref<BiDashboard|null>(null),loading=ref(false),error=ref(''),activeTrend=ref('sales');let timer:number|undefined;
+const metricMeta:Record<string,{label:string;kind?:'money'|'percent';tone:string}>={today_sales:{label:'今日销售额',kind:'money',tone:'green'},yesterday_sales:{label:'昨日销售额',kind:'money',tone:'blue'},month_sales:{label:'本月销售额',kind:'money',tone:'violet'},year_sales:{label:'本年销售额',kind:'money',tone:'orange'},today_orders:{label:'今日订单数',tone:'blue'},pending_payment:{label:'待付款',tone:'orange'},pending_review:{label:'待审核',tone:'orange'},pending_purchase:{label:'待采购',tone:'violet'},pending_inbound:{label:'待入库',tone:'violet'},pending_picking:{label:'待拣货',tone:'blue'},pending_delivery:{label:'待配送',tone:'blue'},delivering:{label:'配送中',tone:'green'},pending_after_sales:{label:'待售后',tone:'red'},inventory_warning:{label:'库存预警',tone:'red'},low_stock:{label:'低库存商品',tone:'orange'},new_customers:{label:'今日新增客户',tone:'green'},new_products:{label:'今日新增商品',tone:'green'},today_purchase_amount:{label:'今日采购金额',kind:'money',tone:'violet'},today_profit:{label:'今日利润',kind:'money',tone:'green'},today_margin:{label:'今日毛利率',kind:'percent',tone:'green'}};
+const cards=computed(()=>Object.entries(data.value?.metrics??{}).map(([key,value])=>({key,value,...metricMeta[key]})).filter(x=>x.label));
+const trendTabs=computed(()=>Object.keys(data.value?.trends??{}).map(key=>({key,label:{sales:'销售趋势',orders:'订单趋势',profit:'利润趋势',customers:'客户增长',purchases:'采购趋势',inventory:'库存变化'}[key]??key})));
+const trendRows=computed(()=>data.value?.trends?.[activeTrend.value]??[]);
+function format(card:{value:number;kind?:string}){if(card.kind==='money')return `¥${Number(card.value).toLocaleString('zh-CN',{maximumFractionDigits:2})}`;if(card.kind==='percent')return `${Number(card.value).toFixed(2)}%`;return Number(card.value).toLocaleString();}
+async function load(){loading.value=true;error.value='';try{data.value=await biApi.dashboard();if(!data.value.trends[activeTrend.value])activeTrend.value=Object.keys(data.value.trends)[0]??'';}catch{error.value='驾驶舱数据加载失败，请稍后重试';}finally{loading.value=false;}}
+onMounted(()=>{void load();timer=window.setInterval(load,30000);});onBeforeUnmount(()=>window.clearInterval(timer));
 </script>
-
-<template>
-  <section v-loading="loading">
-    <div class="page-heading">
-      <div>
-        <p class="eyebrow">OPERATIONS DESK</p>
-        <h1>{{ canLoadManagement ? "经营数据看板" : "仓库工作台" }}</h1>
-      </div>
-      <ElButton @click="load">刷新</ElButton>
-    </div>
-
-    <ElAlert v-if="error" :title="error" type="error" :closable="false" />
-
-    <template v-if="canLoadManagement">
-      <h2 class="section-title">经营概览</h2>
-      <div class="metric-grid">
-        <article v-for="card in businessCards" :key="card.label" class="metric-card">
-          <span>{{ card.label }}</span><strong>{{ card.value }}</strong>
-        </article>
-      </div>
-
-      <div class="table-grid">
-        <ElCard shadow="never">
-          <template #header>库存预警</template>
-          <ElTable :data="management?.inventory.warnings ?? []" height="310">
-            <ElTableColumn prop="product_name" label="商品" min-width="120" />
-            <ElTableColumn prop="sku_name" label="SKU" min-width="120" />
-            <ElTableColumn label="可售/预警" min-width="120">
-              <template #default="{ row }">
-                {{ row.available_quantity }}/{{ row.stock_warning }} {{ row.stock_unit }}
-              </template>
-            </ElTableColumn>
-          </ElTable>
-        </ElCard>
-        <ElCard shadow="never">
-          <template #header>客户欠款 TOP 10</template>
-          <ElTable :data="management?.receivables.customers ?? []" height="310">
-            <ElTableColumn prop="customer_name" label="客户" min-width="140" />
-            <ElTableColumn prop="balance_due" label="欠款" min-width="110">
-              <template #default="{ row }">¥{{ row.balance_due }}</template>
-            </ElTableColumn>
-            <ElTableColumn prop="credit_days" label="账期(天)" width="90" />
-          </ElTable>
-        </ElCard>
-      </div>
-    </template>
-
-    <template v-if="canLoadWarehouse">
-      <h2 class="section-title">订单履约</h2>
-      <div class="metric-grid">
-        <article v-for="card in warehouseCards" :key="card.label" class="metric-card">
-          <span>{{ card.label }}</span><strong>{{ card.value }}</strong>
-        </article>
-      </div>
-    </template>
-  </section>
-</template>
-
-<style scoped>
-.section-title { margin: 26px 0 14px; color: #273c30; font-size: 18px; }
-.metric-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.metric-card { padding: 22px; border: 1px solid #e5ebe7; border-left: 5px solid #24734b; border-radius: 14px; background: #fff; }
-.metric-card span { display: block; color: #78847c; }
-.metric-card strong { display: block; margin-top: 12px; color: #21352a; font-size: 30px; }
-.table-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 20px; }
-@media (max-width: 960px) {
-  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .table-grid { grid-template-columns: 1fr; }
-}
-</style>
+<template><section class="cockpit" v-loading="loading">
+  <div class="page-heading"><div><p class="eyebrow">REAL-TIME OPERATIONS</p><h1>经营驾驶舱</h1><p>销售、采购、库存、配送与利润实时经营总览</p></div><div class="refresh"><span class="live-dot"/>30秒自动刷新 <ElButton @click="load">立即刷新</ElButton></div></div>
+  <ElAlert v-if="error" :title="error" type="error" :closable="false"/>
+  <div class="metric-grid"><article v-for="card in cards" :key="card.key" :class="['metric-card',card.tone]"><span>{{card.label}}</span><strong>{{format(card)}}</strong><small>截至 {{data?.generated_at ? new Date(data.generated_at).toLocaleTimeString() : '--'}}</small></article></div>
+  <div class="cockpit-grid"><article class="panel trend-panel"><div class="panel-head"><div><h3>实时经营趋势</h3><p>真实业务数据按日期聚合</p></div><ElSegmented v-model="activeTrend" :options="trendTabs.map(x=>({label:x.label,value:x.key}))"/></div><BiChart :rows="trendRows" type="area" :value-key="activeTrend==='sales'?'sales_amount':'value'"/></article>
+    <article class="panel quick-panel"><div class="panel-head"><div><h3>快捷分析</h3><p>进入专业 BI 主题报表</p></div></div><RouterLink v-for="x in [{to:'/bi/inventory',name:'库存分析',desc:'库存金额与预警'},{to:'/bi/finance',name:'财务分析',desc:'收入利润与应收'},{to:'/bi/products',name:'商品分析',desc:'销售与毛利排行'},{to:'/bi/customers',name:'客户分析',desc:'采购、欠款与复购'},{to:'/bi/purchases',name:'采购分析',desc:'采购成本与负责人'},{to:'/bi/delivery',name:'配送分析',desc:'完成率与配送异常'}]" :key="x.to" :to="x.to"><span>{{x.name}}</span><small>{{x.desc}}</small><b>→</b></RouterLink></article>
+  </div>
+</section></template>
+<style scoped>.cockpit{min-width:0}.page-heading p{margin:6px 0 0;color:#718078}.refresh{display:flex;gap:10px;align-items:center;color:#6b7b72;font-size:13px}.live-dot{width:9px;height:9px;border-radius:50%;background:#22c55e;box-shadow:0 0 0 5px #dcfce7}.metric-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px}.metric-card{position:relative;overflow:hidden;padding:18px;background:#fff;border:1px solid #e3e9e5;border-radius:14px}.metric-card:before{content:'';position:absolute;inset:0 auto 0 0;width:4px;background:#16a34a}.metric-card.blue:before{background:#2563eb}.metric-card.violet:before{background:#7c3aed}.metric-card.orange:before{background:#f59e0b}.metric-card.red:before{background:#ef4444}.metric-card span,.metric-card small{color:#78857d}.metric-card strong{display:block;margin:9px 0;font-size:24px;color:#183529}.metric-card small{font-size:10px}.cockpit-grid{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,.7fr);gap:14px;margin-top:16px}.panel{padding:20px;background:#fff;border:1px solid #e3e9e5;border-radius:16px}.panel-head{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px}.panel-head h3,.panel-head p{margin:0}.panel-head p{margin-top:6px;color:#89948e;font-size:12px}.quick-panel a{display:grid;grid-template-columns:1fr auto;gap:3px 15px;padding:13px 8px;color:#1f3a2c;text-decoration:none;border-bottom:1px solid #edf1ee}.quick-panel a span{font-weight:650}.quick-panel a small{color:#849189}.quick-panel a b{grid-area:1/2/3/3;align-self:center;color:#16a34a;font-size:20px}@media(max-width:1500px){.metric-grid{grid-template-columns:repeat(4,1fr)}}@media(max-width:1050px){.metric-grid{grid-template-columns:repeat(2,1fr)}.cockpit-grid{grid-template-columns:1fr}.panel-head{display:block}.el-segmented{margin-top:12px;max-width:100%;overflow:auto}}</style>

@@ -1,0 +1,20 @@
+<script setup lang="ts">
+import { computed } from 'vue';
+const props=withDefaults(defineProps<{rows:Array<Record<string,any>>;type?:'line'|'area'|'bar'|'donut'|'ranking';valueKey?:string}>(),{type:'line',valueKey:'value'});
+const normalized=computed(()=>props.rows.slice(0,20).map((x,i)=>({label:String(x.report_date??x.label??x.name??`#${i+1}`),value:Number(x[props.valueKey]??x.sales_amount??x.purchase_amount??x.profit_amount??x.value??0)})));
+const max=computed(()=>Math.max(...normalized.value.map(x=>Math.abs(x.value)),1));
+const points=computed(()=>normalized.value.map((x,i)=>`${normalized.value.length===1?50:(i/(normalized.value.length-1))*100},${92-(x.value/max.value)*76}`).join(' '));
+const total=computed(()=>normalized.value.reduce((n,x)=>n+x.value,0));
+const colors=['#16a34a','#0ea5e9','#f59e0b','#8b5cf6','#ef4444','#14b8a6','#6366f1','#84cc16'];
+</script>
+<template><div class="bi-chart">
+  <template v-if="type==='line'||type==='area'">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none"><defs><linearGradient id="biFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#16a34a" stop-opacity=".34"/><stop offset="1" stop-color="#16a34a" stop-opacity=".02"/></linearGradient></defs><polyline v-if="type==='area'&&points" :points="`${points} 100,100 0,100`" fill="url(#biFill)" stroke="none"/><polyline :points="points" fill="none" stroke="#16a34a" stroke-width="1.6" vector-effect="non-scaling-stroke"/></svg>
+    <div class="axis"><span v-for="x in normalized" :key="x.label">{{x.label.slice(5)}}</span></div>
+  </template>
+  <div v-else-if="type==='bar'" class="bars"><div v-for="x in normalized" :key="x.label" class="bar-row"><span>{{x.label}}</span><i><b :style="{width:`${Math.max(2,x.value/max*100)}%`}"/></i><strong>{{x.value.toLocaleString()}}</strong></div></div>
+  <div v-else-if="type==='donut'" class="donut-wrap"><div class="donut" :style="{background:`conic-gradient(${normalized.map((x,i)=>`${colors[i%colors.length]} ${normalized.slice(0,i).reduce((n,y)=>n+y.value,0)/(total||1)*100}% ${normalized.slice(0,i+1).reduce((n,y)=>n+y.value,0)/(total||1)*100}%`).join(',')})`}"><span>{{total.toLocaleString()}}</span></div><div class="legend"><div v-for="(x,i) in normalized" :key="x.label"><i :style="{background:colors[i%colors.length]}"/>{{x.label}} <b>{{x.value.toLocaleString()}}</b></div></div></div>
+  <div v-else class="ranking"><div v-for="(x,i) in normalized" :key="x.label"><b>{{i+1}}</b><span>{{x.label}}</span><strong>{{x.value.toLocaleString()}}</strong></div></div>
+  <ElEmpty v-if="!normalized.length" description="暂无统计数据" :image-size="60"/>
+</div></template>
+<style scoped>.bi-chart{position:relative;min-height:250px}.bi-chart>svg{width:100%;height:220px;background:repeating-linear-gradient(to bottom,#fff 0,#fff 53px,#edf2ef 54px);border-radius:10px}.axis{display:flex;justify-content:space-between;color:#8a9590;font-size:11px;overflow:hidden}.bars,.ranking{display:grid;gap:8px}.bar-row{display:grid;grid-template-columns:minmax(90px,1fr) 3fr 90px;gap:10px;align-items:center;font-size:13px}.bar-row i{height:12px;background:#edf3ef;border-radius:8px;overflow:hidden}.bar-row b{display:block;height:100%;background:linear-gradient(90deg,#16a34a,#4ade80);border-radius:8px}.bar-row strong{text-align:right}.donut-wrap{display:flex;align-items:center;justify-content:center;gap:35px}.donut{width:185px;height:185px;border-radius:50%;display:grid;place-items:center;position:relative}.donut:after{content:'';position:absolute;inset:35px;background:#fff;border-radius:50%}.donut span{z-index:1;font-size:18px;font-weight:700}.legend{display:grid;gap:8px}.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px}.legend b{margin-left:8px}.ranking>div{display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #edf1ee}.ranking>div>b{display:grid;place-items:center;width:24px;height:24px;background:#e8f5ec;color:#15803d;border-radius:7px}.ranking span{flex:1}.ranking strong{font-size:13px}@media(max-width:800px){.donut-wrap{flex-direction:column}.bar-row{grid-template-columns:90px 1fr 70px}}</style>

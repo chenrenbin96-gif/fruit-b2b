@@ -12,6 +12,18 @@ export class ReportQueryDto {
   @IsOptional() @IsString() purchase_manager_id?:string;
   @IsOptional() @IsString() supplier_id?:string;
   @IsOptional() @IsString() category_id?:string;
+  @IsOptional() @IsString() category_parent_id?:string;
+  @IsOptional() @IsString() brand?:string;
+  @IsOptional() @IsString() customer_type_id?:string;
+  @IsOptional() @IsString() delivery_region_id?:string;
+  @IsOptional() @Type(()=>Number) @IsInt() @Min(1) @Max(50) top=10;
   @IsOptional() @Type(()=>Number) @IsInt() @Min(1) page=1;
   @IsOptional() @Type(()=>Number) @IsInt() @Min(1) @Max(100) page_size=20;
+}
+
+export const biReportTypes=['inventory','delivery','finance','salespersons','customers','products','purchases'] as const;
+export class BiReportTypeDto { @IsIn(biReportTypes) type!: typeof biReportTypes[number]; }
+export class BiExportQueryDto extends ReportQueryDto {
+  @IsOptional() @IsIn(['xlsx','csv','pdf']) format:'xlsx'|'csv'|'pdf'='xlsx';
+  @IsOptional() @IsIn(['page','all','filtered']) scope:'page'|'all'|'filtered'='filtered';
 }
