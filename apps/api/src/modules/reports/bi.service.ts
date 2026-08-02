@@ -38,7 +38,7 @@ export class BiService {
           ROUND(SUM(CASE WHEN o.created_at>=MAKEDATE(YEAR(CURRENT_DATE()),1) AND o.status<>'CANCELLED' THEN COALESCE(o.final_amount,o.estimated_amount) ELSE 0 END),2) year_sales,
           SUM(DATE(o.created_at)=CURRENT_DATE()) today_orders
           FROM orders o JOIN customers c ON c.id=o.customer_id WHERE o.tenant_id=?${salesScope}`, salesParams),
-        this.db.query(`SELECT status,COUNT(*) count FROM orders o JOIN customers c ON c.id=o.customer_id WHERE o.tenant_id=?${salesScope} GROUP BY status`, salesParams),
+        this.db.query(`SELECT o.status,COUNT(*) count FROM orders o JOIN customers c ON c.id=o.customer_id WHERE o.tenant_id=?${salesScope} GROUP BY o.status`, salesParams),
         this.db.query(`SELECT
           SUM(status IN ('PENDING_PURCHASE','PURCHASING')) pending_purchase,
           SUM(status IN ('ARRIVED','PARTIALLY_RECEIVED','RECEIVED')) pending_inbound
